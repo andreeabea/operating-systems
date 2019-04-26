@@ -45,38 +45,46 @@ bool th12_ended=false;
 void thread_function3(void* arg)
 {
 	int* th_id=(int*) arg;
-	P(sem_id,0);
+	if(*th_id!=12)
+	{
+		P(sem_id,0);
+	}
 	info(BEGIN,3,*th_id);
 
 	P(sem_id,1);
 	nb_threads++;
 	V(sem_id,1);
 
-	if(*th_id==12)
-	{	
-		P(sem_id,2);	
-	
-		th12_ended=true;
-		V(sem_id,3);	
-	}
-	else if(*th_id==1 || *th_id==2 || *th_id==3)
-	{
-		if(!th12_ended)
-		{
-			P(sem_id,3);	
-		}
-	}
 	if(nb_threads==4)
 	{
 		V(sem_id,2);
 	}
-	
+
+	if(*th_id==12)
+	{	
+		P(sem_id,2);
+		V(sem_id,3);
+		info(END,3,*th_id);
+		V(sem_id,2);
+	}
+
+	if(*th_id!=12)
+	{
+		P(sem_id,3);
+		V(sem_id,3);
+	}
+
 	P(sem_id,1);
 	nb_threads--;
 	V(sem_id,1);
 
-	info(END,3,*th_id);
-	V(sem_id,0);
+	if(*th_id!=12)
+	{
+		P(sem_id,2);
+		info(END,3,*th_id);
+		V(sem_id,0);
+		V(sem_id,2);
+	}
 	
 }
 
@@ -120,10 +128,13 @@ int main(int argc, char** argv){
         				perror("Error creating the semaphore set");
         				exit(2);
     				}
-				semctl(sem_id,0,SETVAL,4);
+				semctl(sem_id,0,SETVAL,3);
 				semctl(sem_id,1,SETVAL,1);
 				semctl(sem_id,2,SETVAL,1);
-				semctl(sem_id,3,SETVAL,3);
+				semctl(sem_id,3,SETVAL,1);
+				
+				P(sem_id,2);
+				P(sem_id,3);
 
 				for(i=0;i<46;i++)
 				{
