@@ -7,11 +7,16 @@
 #include <sys/sem.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <semaphore.h>
+#include <fcntl.h>
 
 pthread_t *threads;							
 int* values;
 
 int sem_id;
+
+sem_t *sem1;
+sem_t *sem2;
 
 void P(int sem_id, int sem_no)
 {
@@ -28,19 +33,31 @@ void V(int sem_id, int sem_no)
 void thread_function7(void* arg)
 {
 	int* th_id=(int*) arg;
-	info(BEGIN,7,*th_id);
 
 	if(*th_id==1)
 	{
+		info(BEGIN,7,*th_id);
 		values[2]=3;
 		pthread_create(&threads[2],NULL,(void*)thread_function7,&values[2]);
 		pthread_join(threads[2],NULL);	
+		info(END,7,*th_id);
 	}
-	info(END,7,*th_id);
+	else if(*th_id==4)
+	{
+		sem_wait(sem1);
+		info(BEGIN,7,*th_id);
+		info(END,7,*th_id);
+		sem_post(sem1);
+		sem_post(sem2);
+	}
+	else
+	{
+		info(BEGIN,7,*th_id);
+		info(END,7,*th_id);
+	}
 }
 
 int nb_threads=0;
-bool th12_ended=false;
 
 void thread_function3(void* arg)
 {
@@ -91,9 +108,25 @@ void thread_function3(void* arg)
 void thread_function6(void* arg)
 {
 	int* th_id=(int*) arg;
-	info(BEGIN,6,*th_id);
 	
-	info(END,6,*th_id);
+	if(*th_id==6)
+	{
+		info(BEGIN,6,*th_id);
+		info(END,6,*th_id);
+		sem_post(sem1);
+	}
+	else if(*th_id==4)
+	{
+		sem_wait(sem2);
+		info(BEGIN,6,*th_id);
+		info(END,6,*th_id);
+		sem_post(sem2);
+	}
+	else
+	{
+		info(BEGIN,6,*th_id);
+		info(END,6,*th_id);
+	}
 }
 
 int main(int argc, char** argv){
@@ -102,6 +135,9 @@ int main(int argc, char** argv){
     int state2, state3, state4, state5, state6, state7, state8;
    
     init();
+	
+    sem1 = sem_open("/sem1", O_CREAT, 0644, 1);
+    sem2 = sem_open("/sem2", O_CREAT, 0644, 1);	
 
     info(BEGIN, 1, 0);
     
@@ -118,6 +154,7 @@ int main(int argc, char** argv){
 			case -1: perror("Cannot create a new child");
  				 exit(1);
 			case 0: info(BEGIN,3,0);
+
 				int i;
 				threads=(pthread_t*)calloc(46,sizeof(pthread_t));
 				values=(int*)calloc(46,sizeof(int));
@@ -152,6 +189,8 @@ int main(int argc, char** argv){
 				semctl(sem_id,3,IPC_RMID,0);
 				free(values);
  				free(threads);
+
+				info(END,3,0);
 				break;
 			default: P4=fork();
 				 switch(P4)
@@ -165,16 +204,16 @@ int main(int argc, char** argv){
 							case -1: perror("Cannot create a new child");
  						 		 exit(1);
 							case 0: info(BEGIN,8,0);
+								info(END,8,0);
 								break;
 							default: waitpid(P8,&state8,0);
-								 info(END,8,0);
+								 info(END,4,0);
 								 break;
 						}
 						break;
 					default: waitpid(P3,&state3,0);
-						 info(END,3,0);
 						 waitpid(P4,&state4,0);
-						 info(END,4,0);
+						 info(END, 2, 0);
 						 break;
 				 }
 				 break;
@@ -187,6 +226,7 @@ int main(int argc, char** argv){
 			case -1: perror("Cannot create a new child");
  				 exit(1);
 			case 0: info(BEGIN,5,0);
+				info(END,5,0);
 				break;
 			default: P6=fork();
 				 switch(P6)
@@ -194,39 +234,18 @@ int main(int argc, char** argv){
 					case -1: perror("Cannot create a new child");
  						 exit(1);
 					case 0: info(BEGIN,6,0);
-						int i;
-						threads=(pthread_t*)calloc(6,sizeof(pthread_t));
-						values=(int*)calloc(6,sizeof(int));
-
-						for(i=0;i<6;i++)
-						{
-							
-							{
-								values[i]=i+1;
-								pthread_create(&threads[i],NULL,(void*)thread_function6,&values[i]);
-							}	
-						}
-						for(i=0;i<6;i++)
-						{
-							//if(i!=2)
-							{
-								pthread_join(threads[i],NULL);	
-							}
-						}
-							
-						free(values);
-	 					free(threads);
-
 						P7=fork();
 						switch(P7)
 						{
 							case -1: perror("Cannot create a new child");
  						 		 exit(1);
 							case 0: info(BEGIN,7,0);
-								
+
                                                                 int i;
 								threads=(pthread_t*)calloc(4,sizeof(pthread_t));
 								values=(int*)calloc(4,sizeof(int));
+
+   					       			sem_wait(sem1);
 
 								for(i=0;i<4;i++)
 								{
@@ -244,20 +263,40 @@ int main(int argc, char** argv){
 									}
 								}
 								
+								sem_close(sem1);
+								sem_close(sem2);
 								free(values);
 	 							free(threads);
+								info(END,7,0);
 								break;
-							default: waitpid(P7,&state7,0);
-								 info(END,7,0);
+							default: 
+								 threads=(pthread_t*)calloc(6,sizeof(pthread_t));
+								 values=(int*)calloc(6,sizeof(int));
+
+								 sem_wait(sem2);
+
+								 for(i=0;i<6;i++)
+								 {
+									values[i]=i+1;
+									pthread_create(&threads[i],NULL,(void*)thread_function6,&values[i]);
+								 }
+								 for(i=0;i<6;i++)
+								 {
+									pthread_join(threads[i],NULL);	
+								 }
+								 sem_close(sem1);
+								 sem_close(sem2);	
+								 free(values);
+	 							 free(threads);
+
+								 waitpid(P7,&state7,0);
+								 info(END,6,0);
 								 break;
 						}
 						break;
 					default: waitpid(P2,&state2,0);
-						 info(END, 2, 0);
 						 waitpid(P5,&state5,0);
-						 info(END,5,0);
 						 waitpid(P6,&state6,0);
-						 info(END,6,0);
 						 info(END, 1, 0);
 						 break;
 				 }
@@ -265,6 +304,11 @@ int main(int argc, char** argv){
 		}
 		break;
     }   
+    
+    sem_close(sem1);
+    sem_close(sem2);
+    sem_unlink("/sem1");
+    sem_unlink("/sem2");
 
     return 0;
 }
